@@ -105,3 +105,12 @@ func (m *Map[K, V]) Range(f func(K, V) bool) {
 		sh.mu.Unlock()
 	}
 }
+
+// Clear removes all entries from the map.
+func (m *Map[K, V]) Clear() {
+	for _, sh := range m.shards {
+		sh.mu.Lock()
+		clear(sh.m)
+		sh.mu.Unlock()
+	}
+}
