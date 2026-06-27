@@ -49,7 +49,7 @@ func TestMap_Concurrency(t *testing.T) {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < keysPer; j++ {
+			for j := range keysPer {
 				key := "key-" + strconv.Itoa(id) + "-" + strconv.Itoa(j)
 				m.Set(key, "val")
 				if v, ok := m.Get(key); !ok || v != "val" {
