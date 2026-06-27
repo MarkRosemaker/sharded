@@ -25,16 +25,17 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/MarkRosemaker/sharded"
 )
 
 func main() {
-	m := sharded.New()
+	m := sharded.NewStringMap[int]()
 
-	m.Set("key", "value")
+	m.Set("key", 3)
 
 	v, ok := m.Get("key")
-	fmt.Println(v, ok) // value true
+	fmt.Println(v, ok) // 3 true
 
 	m.Delete("key")
 	fmt.Println(m.Len()) // 0
