@@ -92,3 +92,16 @@ func (m *Map[_, _]) Len() int {
 	}
 	return n
 }
+
+func (m *Map[K, V]) Range(f func(K, V) bool) {
+	for _, sh := range m.shards {
+		sh.mu.Lock()
+		for k, v := range sh.m {
+			if !f(k, v) {
+				sh.mu.Unlock()
+				return
+			}
+		}
+		sh.mu.Unlock()
+	}
+}
