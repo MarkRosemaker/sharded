@@ -45,7 +45,7 @@ func TestMap_Concurrency(t *testing.T) {
 	const keysPer = 100
 
 	var wg sync.WaitGroup
-	for i := 0; i < goroutines; i++ {
+	for i := range goroutines {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
@@ -63,27 +63,4 @@ func TestMap_Concurrency(t *testing.T) {
 	if m.Len() != goroutines*keysPer {
 		t.Errorf("expected %d items, got %d", goroutines*keysPer, m.Len())
 	}
-}
-
-func BenchmarkMap_Get(b *testing.B) {
-	m := NewMap()
-	for i := 0; i < 1000; i++ {
-		m.Set(strconv.Itoa(i), "val")
-	}
-	b.ResetTimer()
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			m.Get("500")
-		}
-	})
-}
-
-func BenchmarkMap_Set(b *testing.B) {
-	m := NewMap()
-	b.ResetTimer()
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			m.Set("key", "val")
-		}
-	})
 }
