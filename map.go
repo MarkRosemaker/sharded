@@ -10,9 +10,9 @@ const (
 	cacheLineSize = 2 << 5
 )
 
-type shard struct {
+type shard[V any] struct {
 	mu sync.Mutex
-	m  map[string]string
+	m  map[string]V
 	// pad keeps each shard's mutex on its own cache line so that locking
 	// one shard does not cause false sharing with a neighbor.
 	_ [cacheLineSize]byte
@@ -23,12 +23,12 @@ type shard struct {
 // This is the canonical high-throughput design: with enough shards relative to the
 // number of cores, contention all but disappears under a uniform key distribution.
 // Its weakness is a skewed (Zipfian) workload, where hot keys concentrate on a few shards.
-type Map struct{ shards [numShards]*shard }
+type Map[V any] struct{ shards [numShards]*shard[V] }
 
-func NewMap() *Map {
-	s := &Map{}
+func NewMap[V any]() *Map[V] {
+	s := &Map[V]{}
 	for i := range s.shards {
-		s.shards[i] = &shard{m: map[string]string{}}
+		s.shards[i] = &shard[V]{m: map[string]V{}}
 	}
 	return s
 }
@@ -50,9 +50,9 @@ func fnv1a(s string) uint64 {
 	return h
 }
 
-func (m *Map) shardFor(key string) *shard { return m.shards[fnv1a(key)&(numShards-1)] }
+func (m *Map[V]) shardFor(key string) *shard[V] { return m.shards[fnv1a(key)&(numShards-1)] }
 
-func (m *Map) Get(key string) (string, bool) {
+func (m *Map[V]) Get(key string) (V, bool) {
 	p := m.shardFor(key)
 	p.mu.Lock()
 	v, ok := p.m[key]
@@ -60,21 +60,21 @@ func (m *Map) Get(key string) (string, bool) {
 	return v, ok
 }
 
-func (m *Map) Set(key, value string) {
+func (m *Map[V]) Set(key string, value V) {
 	p := m.shardFor(key)
 	p.mu.Lock()
 	p.m[key] = value
 	p.mu.Unlock()
 }
 
-func (m *Map) Delete(key string) {
+func (m *Map[_]) Delete(key string) {
 	sh := m.shardFor(key)
 	sh.mu.Lock()
 	delete(sh.m, key)
 	sh.mu.Unlock()
 }
 
-func (m *Map) Len() int {
+func (m *Map[_]) Len() int {
 	n := 0
 	for _, sh := range m.shards {
 		sh.mu.Lock()
