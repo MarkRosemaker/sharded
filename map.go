@@ -5,10 +5,22 @@ import "sync"
 const (
 	// numShards is the number of independent map+lock partitions. It must be a
 	// power of two so the shard index is a cheap bitmask of the key hash.
-	numShards = 2 << 7
+	numShards = 1 << 8
 	// 64 bytes is a common cache-line size; the exact value is not load-bearing.
 	cacheLineSize = 2 << 5
 )
+
+type HashFunc[K comparable] func(K) uint64
+
+// Map partitions the key space across many independent maps, each with its own mutex.
+// A key is routed to a shard by its hash, so operations on different shards never contend.
+// This is the canonical high-throughput design: with enough shards relative to the
+// number of cores, contention all but disappears under a uniform key distribution.
+// Its weakness is a skewed (Zipfian) workload, where hot keys concentrate on a few shards.
+type Map[K comparable, V any] struct {
+	shards [numShards]*shard[V]
+	hash   HashFunc[K]
+}
 
 type shard[V any] struct {
 	mu sync.Mutex
@@ -18,19 +30,16 @@ type shard[V any] struct {
 	_ [cacheLineSize]byte
 }
 
-// Map partitions the key space across many independent maps, each with its own mutex.
-// A key is routed to a shard by its hash, so operations on different shards never contend.
-// This is the canonical high-throughput design: with enough shards relative to the
-// number of cores, contention all but disappears under a uniform key distribution.
-// Its weakness is a skewed (Zipfian) workload, where hot keys concentrate on a few shards.
-type Map[V any] struct{ shards [numShards]*shard[V] }
-
-func NewMap[V any]() *Map[V] {
-	s := &Map[V]{}
+func NewMap[K comparable, V any](hf HashFunc[K]) *Map[K, V] {
+	s := &Map[K, V]{hash: hf}
 	for i := range s.shards {
 		s.shards[i] = &shard[V]{m: map[string]V{}}
 	}
 	return s
+}
+
+func NewStringMap[V any]() *Map[string, V] {
+	return NewMap[string, V](fnv1a)
 }
 
 // fnv1a is an inlined FNV-1a hash. We compute it ourselves instead of using
@@ -50,9 +59,9 @@ func fnv1a(s string) uint64 {
 	return h
 }
 
-func (m *Map[V]) shardFor(key string) *shard[V] { return m.shards[fnv1a(key)&(numShards-1)] }
+func (m *Map[_, V]) shardFor(key string) *shard[V] { return m.shards[fnv1a(key)&(numShards-1)] }
 
-func (m *Map[V]) Get(key string) (V, bool) {
+func (m *Map[_, V]) Get(key string) (V, bool) {
 	p := m.shardFor(key)
 	p.mu.Lock()
 	v, ok := p.m[key]
@@ -60,21 +69,21 @@ func (m *Map[V]) Get(key string) (V, bool) {
 	return v, ok
 }
 
-func (m *Map[V]) Set(key string, value V) {
+func (m *Map[_, V]) Set(key string, value V) {
 	p := m.shardFor(key)
 	p.mu.Lock()
 	p.m[key] = value
 	p.mu.Unlock()
 }
 
-func (m *Map[_]) Delete(key string) {
+func (m *Map[_, _]) Delete(key string) {
 	sh := m.shardFor(key)
 	sh.mu.Lock()
 	delete(sh.m, key)
 	sh.mu.Unlock()
 }
 
-func (m *Map[_]) Len() int {
+func (m *Map[_, _]) Len() int {
 	n := 0
 	for _, sh := range m.shards {
 		sh.mu.Lock()

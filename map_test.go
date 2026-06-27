@@ -7,7 +7,7 @@ import (
 )
 
 func TestMap_Basic(t *testing.T) {
-	m := NewMap[string]()
+	m := NewStringMap[string]()
 
 	// empty
 	if v, ok := m.Get("missing"); ok || v != "" {
@@ -40,7 +40,7 @@ func TestMap_Basic(t *testing.T) {
 }
 
 func TestMap_Concurrency(t *testing.T) {
-	m := NewMap[string]()
+	m := NewStringMap[string]()
 	const goroutines = 100
 	const keysPer = 100
 
