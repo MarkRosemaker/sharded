@@ -3,7 +3,9 @@ package sharded
 import "sync"
 
 const (
-	shards                = 2 << 7               // power of two, so we can mask instead of modulo
+	// numShards is the number of independent map+lock partitions. It must be a
+	// power of two so the shard index is a cheap bitmask of the key hash.
+	numShards             = 2 << 7
 	fnvOffsetBasis uint64 = 14695981039346656037 // FNV-1a
 	fnvPrime       uint64 = 1099511628211
 )
@@ -13,14 +15,22 @@ type part struct {
 	m  map[string]string
 }
 
-type Map struct{ parts [shards]*part }
+type Map struct{ parts [numShards]*part }
+
+func NewMap() *Map {
+	s := &Map{}
+	for i := range s.parts {
+		s.parts[i] = &part{m: make(map[string]string)}
+	}
+	return s
+}
 
 func (c *Map) at(key string) *part {
 	h := fnvOffsetBasis
 	for i := 0; i < len(key); i++ {
 		h = (h ^ uint64(key[i])) * fnvPrime
 	}
-	return c.parts[h&(shards-1)]
+	return c.parts[h&(numShards-1)]
 }
 
 func (c *Map) Get(key string) (string, bool) {
@@ -36,4 +46,21 @@ func (c *Map) Set(key, value string) {
 	p.mu.Lock()
 	p.m[key] = value
 	p.mu.Unlock()
+}
+
+func (c *Map) Delete(key string) {
+	sh := c.at(key)
+	sh.mu.Lock()
+	delete(sh.m, key)
+	sh.mu.Unlock()
+}
+
+func (c *Map) Len() int {
+	n := 0
+	for _, sh := range c.parts {
+		sh.mu.Lock()
+		n += len(sh.m)
+		sh.mu.Unlock()
+	}
+	return n
 }
