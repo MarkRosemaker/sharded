@@ -18,13 +18,13 @@ type HashFunc[K comparable] func(K) uint64
 // number of cores, contention all but disappears under a uniform key distribution.
 // Its weakness is a skewed (Zipfian) workload, where hot keys concentrate on a few shards.
 type Map[K comparable, V any] struct {
-	shards [numShards]*shard[V]
+	shards [numShards]*shard[K, V]
 	hash   HashFunc[K]
 }
 
-type shard[V any] struct {
+type shard[K comparable, V any] struct {
 	mu sync.Mutex
-	m  map[string]V
+	m  map[K]V
 	// pad keeps each shard's mutex on its own cache line so that locking
 	// one shard does not cause false sharing with a neighbor.
 	_ [cacheLineSize]byte
@@ -33,7 +33,7 @@ type shard[V any] struct {
 func NewMap[K comparable, V any](hf HashFunc[K]) *Map[K, V] {
 	s := &Map[K, V]{hash: hf}
 	for i := range s.shards {
-		s.shards[i] = &shard[V]{m: map[string]V{}}
+		s.shards[i] = &shard[K, V]{m: map[K]V{}}
 	}
 	return s
 }
@@ -59,9 +59,9 @@ func fnv1a(s string) uint64 {
 	return h
 }
 
-func (m *Map[_, V]) shardFor(key string) *shard[V] { return m.shards[fnv1a(key)&(numShards-1)] }
+func (m *Map[K, V]) shardFor(key K) *shard[K, V] { return m.shards[m.hash(key)&(numShards-1)] }
 
-func (m *Map[_, V]) Get(key string) (V, bool) {
+func (m *Map[K, V]) Get(key K) (V, bool) {
 	p := m.shardFor(key)
 	p.mu.Lock()
 	v, ok := p.m[key]
@@ -69,14 +69,14 @@ func (m *Map[_, V]) Get(key string) (V, bool) {
 	return v, ok
 }
 
-func (m *Map[_, V]) Set(key string, value V) {
+func (m *Map[K, V]) Set(key K, value V) {
 	p := m.shardFor(key)
 	p.mu.Lock()
 	p.m[key] = value
 	p.mu.Unlock()
 }
 
-func (m *Map[_, _]) Delete(key string) {
+func (m *Map[K, _]) Delete(key K) {
 	sh := m.shardFor(key)
 	sh.mu.Lock()
 	delete(sh.m, key)
