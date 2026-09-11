@@ -43,6 +43,7 @@ func NewMap[K comparable, V any](hf HashFunc[K]) *Map[K, V] {
 	for i := range s.shards {
 		s.shards[i] = &shard[K, V]{m: map[K]V{}}
 	}
+
 	return s
 }
 
@@ -80,6 +81,7 @@ func (m *Map[K, V]) Get(key K) (V, bool) {
 	p.mu.Lock()
 	v, ok := p.m[key]
 	p.mu.Unlock() // explicit, not defer (+8% here, see article)
+
 	return v, ok
 }
 
@@ -108,6 +110,7 @@ func (m *Map[_, _]) Len() int {
 		n += len(sh.m)
 		sh.mu.Unlock()
 	}
+
 	return n
 }
 
