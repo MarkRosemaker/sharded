@@ -1,0 +1,5 @@
+- Simple, familiar API (`Get`/`Set`/`Delete`/`Len`)
+- Excellent scaling with core count
+- Minimal overhead and allocations
+- Cache-line padded shards to reduce false sharing
+- Fast key-to-shard routing via FNV-1a hash and bitmask
