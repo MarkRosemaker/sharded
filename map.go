@@ -30,9 +30,11 @@ type Map[K comparable, V any] struct {
 
 // shard holds one partition of the map.
 type shard[K comparable, V any] struct {
-	m  map[K]V
 	mu sync.Mutex
-	_  [cacheLineSize]byte
+	m  map[K]V
+	// pad keeps each shard's mutex on its own cache line to avoid
+	// false sharing with neighboring shards.
+	_ [cacheLineSize]byte
 }
 
 // NewMap creates a new sharded map using the provided hash function.
